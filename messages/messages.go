@@ -2,7 +2,11 @@
 // state machine and the system command layer.
 package messages
 
-import "strings"
+import (
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
 
 // ErrorKind classifies the severity of an installation error.
 type ErrorKind int
@@ -43,8 +47,11 @@ func ClassifyError(err error) ErrorKind {
 }
 
 // CmdOutputMsg carries a single line of stdout/stderr from a running command.
+// Next must be dispatched from Update to receive the following line, enabling
+// real-time log streaming without blocking the Bubble Tea loop.
 type CmdOutputMsg struct {
 	Line string
+	Next tea.Cmd
 }
 
 // CmdDoneMsg signals that a background command completed successfully.

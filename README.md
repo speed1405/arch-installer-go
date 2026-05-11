@@ -33,7 +33,7 @@ arch-installer-go/
 go build -o arch-installer .
 ```
 
-Requires Go 1.21+.
+Requires Go 1.22+.
 
 ## Running
 

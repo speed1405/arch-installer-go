@@ -113,9 +113,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case CmdOutputMsg:
 		m.logLines = append(m.logLines, msg.Line)
-		var cmd tea.Cmd
-		m.progress, cmd = m.progress.Update(msg)
-		return m, cmd
+		m.progress, _ = m.progress.Update(msg)
+		return m, msg.Next // dispatch next read to keep the stream alive
 
 	case CmdDoneMsg:
 		m.logLines = append(m.logLines, "✓ Done.")

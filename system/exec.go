@@ -13,9 +13,11 @@ import (
 	"github.com/speed1405/arch-installer-go/messages"
 )
 
-// Execute runs a system command (optionally under sudo), streams each line of
-// combined stdout+stderr back to the Bubble Tea loop as CmdOutputMsg messages,
-// and returns CmdDoneMsg on success or CmdErrorMsg on failure.
+// Execute runs a system command (optionally under sudo) and streams each line
+// of combined stdout+stderr back to the Bubble Tea loop as CmdOutputMsg
+// messages. Each CmdOutputMsg carries a Next tea.Cmd that the Update function
+// must dispatch to read the following line. When all output is consumed the
+// final message is CmdDoneMsg (or CmdErrorMsg on failure).
 func Execute(ctx context.Context, sudo bool, args ...string) tea.Cmd {
 	return func() tea.Msg {
 		if len(args) == 0 {
@@ -42,7 +44,7 @@ func Execute(ctx context.Context, sudo bool, args ...string) tea.Cmd {
 			return messages.CmdErrorMsg{Err: err, Kind: messages.ClassifyError(err)}
 		}
 
-		// Merge stdout and stderr into a single line channel.
+		// Merge stdout and stderr into a single buffered line channel.
 		lines := make(chan string, 128)
 		var wg sync.WaitGroup
 		for _, r := range []io.Reader{stdout, stderr} {
@@ -55,21 +57,40 @@ func Execute(ctx context.Context, sudo bool, args ...string) tea.Cmd {
 				}
 			}(r)
 		}
+
+		// done receives the process exit error once all output has been read.
+		done := make(chan error, 1)
 		go func() {
 			wg.Wait()
 			close(lines)
+			done <- cmd.Wait()
 		}()
 
-		var buf strings.Builder
-		for line := range lines {
-			buf.WriteString(line + "\n")
-		}
+		// Return the first polling command to the Bubble Tea loop.
+		return readNextLine(lines, done)()
+	}
+}
 
-		if err := cmd.Wait(); err != nil {
-			combined := fmt.Errorf("%w\n%s", err, strings.TrimSpace(buf.String()))
-			return messages.CmdErrorMsg{Err: combined, Kind: messages.ClassifyError(err)}
+// readNextLine returns a tea.Cmd that reads one line from the channel and
+// emits a CmdOutputMsg (with the next polling command attached) or a
+// CmdDoneMsg / CmdErrorMsg when the stream is exhausted.
+func readNextLine(lines <-chan string, done <-chan error) tea.Cmd {
+	return func() tea.Msg {
+		line, ok := <-lines
+		if !ok {
+			// Channel closed — wait for process exit.
+			if err := <-done; err != nil {
+				return messages.CmdErrorMsg{
+					Err:  err,
+					Kind: messages.ClassifyError(err),
+				}
+			}
+			return messages.CmdDoneMsg{}
 		}
-		return messages.CmdDoneMsg{Output: buf.String()}
+		return messages.CmdOutputMsg{
+			Line: line,
+			Next: readNextLine(lines, done),
+		}
 	}
 }
 

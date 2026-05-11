@@ -14,6 +14,7 @@ var BasePackages = []string{
 	"linux-firmware",
 	"networkmanager",
 	"vim",
+	"nano",
 	"sudo",
 }
 
