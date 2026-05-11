@@ -63,21 +63,36 @@ done
 info "All required system tools present – OK"
 
 # ── 6. Go toolchain ───────────────────────────────────────────────────────────
-REQUIRED_GO_MINOR=22   # minimum: Go 1.22
+# Minimum required: Go 1.22 (major=1, minor≥22)
+REQUIRED_GO_MAJOR=1
+REQUIRED_GO_MINOR=22
+
+# Returns 0 (true) if the installed Go version is below the requirement.
+go_too_old() {
+    local ver
+    ver=$(go version | grep -oP '(?<=go)\d+\.\d+' | head -1)
+    local major minor
+    major=$(echo "$ver" | cut -d. -f1)
+    minor=$(echo "$ver" | cut -d. -f2)
+    if [[ $major -lt $REQUIRED_GO_MAJOR ]]; then
+        return 0
+    elif [[ $major -eq $REQUIRED_GO_MAJOR && $minor -lt $REQUIRED_GO_MINOR ]]; then
+        return 0
+    fi
+    return 1
+}
 
 need_go=false
 if ! command -v go > /dev/null 2>&1; then
     warn "Go not found – will install via pacman"
     need_go=true
-else
+elif go_too_old; then
     CURRENT_GO=$(go version | grep -oP '(?<=go)\d+\.\d+' | head -1)
-    CURRENT_MINOR=$(echo "$CURRENT_GO" | cut -d. -f2)
-    if [[ $CURRENT_MINOR -lt $REQUIRED_GO_MINOR ]]; then
-        warn "Go $CURRENT_GO found, but >= 1.$REQUIRED_GO_MINOR is required – will upgrade"
-        need_go=true
-    else
-        info "Go $CURRENT_GO found – OK"
-    fi
+    warn "Go $CURRENT_GO found, but >= ${REQUIRED_GO_MAJOR}.${REQUIRED_GO_MINOR} is required – will upgrade"
+    need_go=true
+else
+    CURRENT_GO=$(go version | grep -oP '(?<=go)\d+\.\d+\.\d+' | head -1)
+    info "Go $CURRENT_GO found – OK"
 fi
 
 if $need_go; then
