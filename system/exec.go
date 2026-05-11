@@ -78,3 +78,22 @@ func ExecuteChroot(ctx context.Context, mountpoint string, args ...string) tea.C
 	chrootArgs := append([]string{"arch-chroot", mountpoint}, args...)
 	return Execute(ctx, true, chrootArgs...)
 }
+
+// ExecuteChrootWithStdin runs a command inside arch-chroot with the given string
+// piped to the process's stdin. This avoids passing secrets through shell arguments.
+func ExecuteChrootWithStdin(ctx context.Context, mountpoint, stdinData string, args ...string) tea.Cmd {
+	return func() tea.Msg {
+		chrootArgs := append(
+			[]string{"sudo", "--non-interactive", "arch-chroot", mountpoint},
+			args...,
+		)
+		cmd := exec.CommandContext(ctx, chrootArgs[0], chrootArgs[1:]...) //nolint:gosec
+		cmd.Stdin = strings.NewReader(stdinData)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			combined := fmt.Errorf("%w\n%s", err, strings.TrimSpace(string(out)))
+			return messages.CmdErrorMsg{Err: combined, Kind: messages.ClassifyError(err)}
+		}
+		return messages.CmdDoneMsg{Output: string(out)}
+	}
+}

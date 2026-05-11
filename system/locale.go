@@ -3,10 +3,14 @@ package system
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/speed1405/arch-installer-go/messages"
 )
+
+// validKeymap matches simple keyboard layout identifiers like "us", "de", "fr".
+var validKeymap = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
 
 // AvailableLocales returns a set of commonly used locales.
 func AvailableLocales() []string {
@@ -40,13 +44,23 @@ func AvailableTimezones() []string {
 }
 
 // ConfigureKeyboard sets the keyboard layout inside chroot.
+// The layout is validated against a safe pattern before use.
 func ConfigureKeyboard(layout string) tea.Cmd {
 	if layout == "" {
 		layout = "us"
 	}
 	return func() tea.Msg {
-		script := fmt.Sprintf("echo 'KEYMAP=%s' > /etc/vconsole.conf", layout)
-		return ExecuteChroot(context.Background(), mountpoint, "sh", "-c", script)()
+		if !validKeymap.MatchString(layout) {
+			return messages.CmdErrorMsg{
+				Err:  fmt.Errorf("invalid keyboard layout: %q", layout),
+				Kind: messages.ErrorCritical,
+			}
+		}
+		return ExecuteChrootWithStdin(
+			context.Background(), mountpoint,
+			"KEYMAP="+layout+"\n",
+			"sh", "-c", "cat > /etc/vconsole.conf",
+		)()
 	}
 }
 
@@ -54,10 +68,9 @@ func ConfigureKeyboard(layout string) tea.Cmd {
 func SyncClock() tea.Cmd {
 	return func() tea.Msg {
 		result := ExecuteChroot(context.Background(), mountpoint, "hwclock", "--systohc")()
-		switch r := result.(type) {
-		case messages.CmdErrorMsg:
-			// non-fatal
-			return messages.CmdOutputMsg{Line: "hwclock: " + r.Err.Error()}
+		if errMsg, ok := result.(messages.CmdErrorMsg); ok {
+			// non-fatal: log and continue
+			return messages.CmdOutputMsg{Line: "hwclock: " + errMsg.Err.Error()}
 		}
 		return result
 	}

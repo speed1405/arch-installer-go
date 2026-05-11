@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -136,5 +135,5 @@ func RenderLogLines(lines []string, max int) string {
 	for _, l := range lines[start:] {
 		sb.WriteString(StyleLog.Render(l) + "\n")
 	}
-	return fmt.Sprintf("%s", sb.String())
+	return sb.String()
 }
